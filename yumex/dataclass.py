@@ -11,6 +11,7 @@ class PackageState(IntEnum):
 
 
 class PackageAction(IntEnum):
+    NONE = 0
     DOWNGRADE = 10
     UPGRADE = 20
     INSTALL = 30
@@ -18,29 +19,31 @@ class PackageAction(IntEnum):
     ERASE = 50
 
 
-@dataclass 
-class YumexPackage(object):
-    name:str
-    arch:str 
-    epoch:str
-    release:str
-    version:str
-    repo:str
-    description:str
-    sizeB:int
-    state:PackageState
-    is_dep:bool = False
-    ref_to:Any = None
-    action:Union(PackageAction, None) = None
-    queued:bool = False
-    queue_action:bool = False
-    installed=False
+class GObject:
+    type = "Gobject"
+
+class YumexPackage(GObject):
 
     def __init__(self, *args, **kwargs):
-        super(YumexPackage, self).__init__(args, kwargs)
+        super(YumexPackage, self).__init__()
+        self.name:str = kwargs.pop("name")
+        self.arch:str = kwargs.pop("arch")
+        self.epoch:str = kwargs.pop("epoch")
+        self.release:str= kwargs.pop("release")
+        self.version:str= kwargs.pop("version")
+        self.repo:str= kwargs.pop("repo")
+        self.description:str= kwargs.pop("description")
+        self.sizeB:int= kwargs.pop("size")
+        self.state:PackageState = kwargs.pop("state",PackageState.AVAILABLE)
+        self.action:PackageAction = kwargs.pop("state",PackageAction.NONE)
+        self.is_dep:bool = False
+        self.ref_to:Any = None
+        self.queued:bool = False
+        self.queue_action:bool = False
+        self.installed=False
     
     @classmethod
-    def from_dnf(cls, pkg):
+    def from_dnf4(cls, pkg):
         return cls(
             name=pkg.name, 
             arch=pkg.arch,
@@ -49,8 +52,7 @@ class YumexPackage(object):
             version=pkg.version, 
             repo=pkg.reponame, 
             description=pkg.summary,
-            sizeB=int(pkg.size),
-            state=PackageState.AVAILABLE,
+            size=int(pkg.size),
         )
 
     @classmethod
@@ -67,7 +69,7 @@ class YumexPackage(object):
             version=pkg.get_version(), 
             repo=pkg.get_repo_id(), 
             description=pkg.get_summary(),
-            sizeB=pkg.get_installed_size(),
+            size=pkg.get_installed_size(),
             state=state,
         )
 
