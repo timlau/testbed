@@ -37,10 +37,9 @@ class YumexPackage(GObject):
         self.state:PackageState = kwargs.pop("state",PackageState.AVAILABLE)
         self.action:PackageAction = kwargs.pop("state",PackageAction.NONE)
         self.is_dep:bool = False
-        self.ref_to:Any = None
+        self.ref_to:YumexPackage = None
         self.queued:bool = False
         self.queue_action:bool = False
-        self.installed=False
     
     @classmethod
     def from_dnf4(cls, pkg):
@@ -69,17 +68,20 @@ class YumexPackage(GObject):
             version=pkg.get_version(), 
             repo=pkg.get_repo_id(), 
             description=pkg.get_summary(),
-            size=pkg.get_installed_size(),
+            size=pkg.get_install_size(),
             state=state,
         )
 
+    @property
+    def installed(self):
+        return self.state == PackageState.INSTALLED
+
     def set_installed(self):
         self.repo = f"@{self.repo}"
-        self.installed = True
         self.state = PackageState.INSTALLED
 
     def set_update(self, inst_pkg):
-        self.ref_to = YumexPackage(inst_pkg)
+        self.ref_to = YumexPackage.from_dnf4(inst_pkg)
         self.ref_to.state = PackageState.INSTALLED
         self.state = PackageState.UPDATE
 
@@ -110,8 +112,8 @@ class YumexPackage(GObject):
     def __str__(self) -> str:
         return f"YumexPackage({self.nevra} : {self.repo})"
 
-#     def __eq__(self, other) -> bool:
-#         return self.nevra == other.nevra
+    def __eq__(self, other) -> bool:
+        return self.nevra == other.nevra
 
     @property
     def id(self):
@@ -125,72 +127,3 @@ class YumexPackage(GObject):
         )
         return ",".join([str(elem) for elem in nevra_r])    
 
-# class YumexPackageOLD(GObject.GObject):
-#     def __init__(self, pkg, state=PackageState.AVAILABLE, action=0):
-#         super(YumexPackage, self).__init__()
-#         self.queued = False
-#         self.queue_action = False  # package being procced by the queue
-#         self.name = pkg.name
-#         self.arch = pkg.arch
-#         self.epoch = pkg.epoch
-#         self.release = pkg.release
-#         self.version = pkg.version
-#         self.repo = pkg.reponame
-#         self.description = pkg.summary
-#         self.sizeB = int(pkg.size)
-#         self.state = state
-#         self.is_dep = False
-#         self.ref_to = None
-#         self.action = action
-
-#     def set_installed(self):
-#         self.repo = f"@{self.repo}"
-#         self.installed = True
-#         self.state = PackageState.INSTALLED
-
-#     def set_update(self, inst_pkg):
-#         self.ref_to = YumexPackage(inst_pkg)
-#         self.ref_to.state = PackageState.INSTALLED
-#         self.state = PackageState.UPDATE
-
-#     @property
-#     def size(self):
-#         return format_number(self.sizeB)
-
-#     @property
-#     def styles(self):
-#         match self.state:
-#             case PackageState.INSTALLED:
-#                 return ["success"]
-#             case PackageState.UPDATE:
-#                 return ["error"]
-#         return []
-
-#     @property
-#     def evr(self):
-#         if self.epoch:
-#             return f"{self.epoch}:{self.version}-{self.release}"
-#         else:
-#             return f"{self.version}-{self.release}"
-
-#     @property
-#     def nevra(self):
-#         return f"{self.name}-{self.evr}.{self.arch}"
-
-#     def __repr__(self) -> str:
-#         return f"YumexPackage({self.nevra} : {self.repo})"
-
-#     def __eq__(self, other) -> bool:
-#         return self.nevra == other.nevra
-
-#     @property
-#     def id(self):
-#         nevra_r = (
-#             self.name,
-#             self.epoch,
-#             self.version,
-#             self.release,
-#             self.arch,
-#             self.repo[1:],
-#         )
-#         return ",".join([str(elem) for elem in nevra_r])    
