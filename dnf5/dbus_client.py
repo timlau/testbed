@@ -1,13 +1,11 @@
 from functools import partial
-from importlib.resources import path
 from logging import getLogger
 from typing import Self
 from dasbus.connection import SystemMessageBus
-from dasbus.error import DBusError, ErrorMapper, get_error_decorator
 from dasbus.identifier import DBusServiceIdentifier
 from dasbus.loop import EventLoop
-import traceback
 from gi.repository import GLib
+from pyparsing import Any
 
 # Constants
 SYSTEM_BUS = SystemMessageBus()
@@ -34,15 +32,15 @@ def gv_int(var: int) -> GLib.Variant:
 
 
 class AsyncDbusCaller:
-    def __init__(self):
+    def __init__(self) -> None:
         self.res = None
         self.loop = None
 
-    def callback(self, call):
+    def callback(self, call) -> None:
         self.res = call()
         self.loop.quit()
 
-    def call(self, mth, *args, **kwargs):
+    def call(self, mth, *args, **kwargs) -> Any:
         self.loop = EventLoop()
         mth(*args, **kwargs, callback=self.callback)
         self.loop.run()
@@ -68,14 +66,14 @@ class Dnf5Client:
         """context manager enter, return current object"""
         return self
 
-    def __exit__(self, exc_type, exc_value, exc_traceback):
+    def __exit__(self, exc_type, exc_value, exc_traceback) -> None:
         """context manager exit"""
         if exc_type:
             log.critical("", exc_info=(exc_type, exc_value, exc_traceback))
         # close dnf5 session
         self.proxy.close_session(self.session_path)
 
-    def _async_method(self, method: str):
+    def _async_method(self, method: str) -> partial:
         """create a patial func to make an async call to a given
         dbus method name
         """
