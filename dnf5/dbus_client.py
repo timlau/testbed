@@ -1,11 +1,10 @@
 from functools import partial
 from logging import getLogger
-from typing import Self
+from typing import Self, Any
 from dasbus.connection import SystemMessageBus
 from dasbus.identifier import DBusServiceIdentifier
 from dasbus.loop import EventLoop
 from gi.repository import GLib
-from pyparsing import Any
 
 # Constants
 SYSTEM_BUS = SystemMessageBus()
