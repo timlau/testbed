@@ -1,5 +1,7 @@
 from functools import partial
+from importlib.resources import path
 from logging import getLogger
+from typing import Self
 from dasbus.connection import SystemMessageBus
 from dasbus.error import DBusError, ErrorMapper, get_error_decorator
 from dasbus.identifier import DBusServiceIdentifier
@@ -13,13 +15,22 @@ SYSTEM_BUS = SystemMessageBus()
 # org.rpm.dnf.v0.SessionManager
 # org.rpm.dnf.v0.rpm.Repo
 # org.rpm.dnf.v0.rpm.Rpm
-DNFDBUS_NAMESPACE = ("org", "rpm", "dnf","v0")
-DNFDBUS = DBusServiceIdentifier(
-    namespace=DNFDBUS_NAMESPACE,
-    message_bus=SYSTEM_BUS
-)
+DNFDBUS_NAMESPACE = ("org", "rpm", "dnf", "v0")
+DNFDBUS = DBusServiceIdentifier(namespace=DNFDBUS_NAMESPACE, message_bus=SYSTEM_BUS)
 
-log = getLogger("dnfdbus")
+log = getLogger("dnf5dbus")
+
+
+def gv_list(var: list[str]) -> GLib.Variant:
+    return GLib.Variant("as", var)
+
+
+def gv_bool(var: bool) -> GLib.Variant:
+    return GLib.Variant("b", var)
+
+def gv_int(var: int) -> GLib.Variant:
+    return GLib.Variant("i", var)
+
 
 class AsyncDbusCaller:
     def __init__(self):
@@ -35,67 +46,48 @@ class AsyncDbusCaller:
         mth(*args, **kwargs, callback=self.callback)
         self.loop.run()
         return self.res
-    
-class DnfDbusClient:
-    """Wrapper class for the dk.rasmil.DnfDbus Dbus object"""
 
-    def __init__(self):
+
+class Dnf5Client:
+    """Wrapper class for the Dbus object"""
+
+    def __init__(self) -> None:
         self.proxy = DNFDBUS.get_proxy()
         self.async_dbus = AsyncDbusCaller()
+        self.session_path = self.proxy.open_session({})
+        self.session = DNFDBUS.get_proxy(self.session_path)
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
         if exc_type:
-            log.debug(f'{exc_type=} {exc_value=} {exc_traceback=}')
-        self.quit()
+            log.debug(f"{exc_type=} {exc_value=} {exc_traceback=}")
+        self.proxy.close_session(self.session_path)
 
-    def get_async_method(self, method):
-        return partial(self.async_dbus.call, getattr(self.proxy, method))
+    def _async_method(self, method):
+        return partial(self.async_dbus.call, getattr(self.session, method))
 
-    def rpm_list(self):
-        call_list = self.get_async_method('list')
-        pkgs = call_list({"scope":"installed"})
-        
-        
+    def get_list(self, *args, **kwargs):
+        options = {}
+        options["patterns"] = gv_list(args)
+        options["package_attrs"] = gv_list(kwargs.pop("package_attrs", ["nevra"]))
+        options["with_src"] = gv_bool(False)
+        options["latest-limit"] = gv_int(1)
+        if "repo" in kwargs:
+            options["repo"] =  gv_list(kwargs.pop("repo"))
+        if "scope" in kwargs:
+            options["scope"] =  kwargs.pop("scope")
+        # get and async partial function
+        get_list = self._async_method("list")
+        result = get_list(options)
+        # [{"id": GLib.Variant(), "nevra": GLib.Variant("s", nevra), "repo": GLib.Variant("s", repo)}, ... ]
+        return [[value.get_string() for value in list(elem.values())[1:]] for elem in result]
+
+
 if __name__ == "__main__":
-    # client = DnfDbusClient()
-    # client.rpm_list()
-
-    bus = SystemMessageBus()
-
-    proxy = bus.get_proxy(
-        "org.rpm.dnf.v0",
-        "/org/rpm/dnf/v0"
-    )
-
-    # connect to dnf5 dbus deamon and get a session
-    session_path = proxy.open_session({})
-    print(f"session : {session_path}")
-    # get a new proxy to the new session
-    session = bus.get_proxy(
-        "org.rpm.dnf.v0",
-        session_path
-    )
-    try:
-        # setup option parameters for the list method
-        # https://dnf5.readthedocs.io/en/latest/dnf_daemon/dnf5daemon_dbus_api.8.html#org.rpm.dnf.v0.rpm.Rpm.list
-        options = {
-            'package_attrs': GLib.Variant("as",["nevra","repo"]), # attribues to get
-            'repo': GLib.Variant("as",["fedora","updates*","rpmfusion*"]), # limit rpoes
-            'patterns': GLib.Variant("as",["dnf*","yum"]), # package globs
-            'with_src': GLib.Variant("b",False), # don't get source packages
-            'latest-limit' : GLib.Variant("i",1), # only the latest packages
-        }
-        pkgs = session.list(options)
-        for elem in pkgs:
-            print(elem["nevra"].get_string(), elem["repo"].get_string())
-    except Exception as e:
-        # print the exception
-        traceback.print_exception(e)
-    finally:
-        # close the session
-        res = proxy.close_session(session_path)
-        if res:
-            print(f"Session closed : {session_path}")
+    with Dnf5Client() as client:
+        pkgs = client.get_list("dnf*","yum*", package_attrs=["nevra","repo"])
+        print(pkgs)
+        for (nevra,repo) in pkgs:
+            print(f"nevra: {nevra} repo: {repo}")
