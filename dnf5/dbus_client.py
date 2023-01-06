@@ -1,17 +1,15 @@
+import traceback
 from functools import partial
 from logging import getLogger
 from typing import Self, Any
 from dasbus.connection import SystemMessageBus
 from dasbus.identifier import DBusServiceIdentifier
 from dasbus.loop import EventLoop
+from dasbus.error import DBusError
 from gi.repository import GLib
 
 # Constants
 SYSTEM_BUS = SystemMessageBus()
-# org.rpm.dnf.v0.Goal
-# org.rpm.dnf.v0.SessionManager
-# org.rpm.dnf.v0.rpm.Repo
-# org.rpm.dnf.v0.rpm.Rpm
 DNFDBUS_NAMESPACE = ("org", "rpm", "dnf", "v0")
 DNFDBUS = DBusServiceIdentifier(namespace=DNFDBUS_NAMESPACE, message_bus=SYSTEM_BUS)
 
@@ -78,7 +76,7 @@ class Dnf5Client:
         """
         return partial(self.async_dbus.call, getattr(self.session, method))
 
-    def get_list(self, *args, **kwargs) -> list[list[str]]:
+    def package_list(self, *args, **kwargs) -> list[list[str]]:
         """call the org.rpm.dnf.v0.rpm.Repo list method
 
         *args is package patterns to match
@@ -111,11 +109,21 @@ class Dnf5Client:
 
 if __name__ == "__main__":
     with Dnf5Client() as client:
-        pkgs = client.get_list(
-            "dnf*",
-            "yum*",
-            package_attrs=["nevra", "repo"],
-            repo=["fedora", "updates"],
+        # print(client.session.Introspect())
+        pkgs = client.package_list(
+            "0xFFFF", package_attrs=["nevra", "repo"], repo=["fedora", "updates"]
         )
         for (nevra, repo) in pkgs:
             print(f"{nevra:40} repo: {repo}")
+            res = client.session.install(gv_list([nevra]), {"strict": gv_bool(False)})
+            print(res)
+        try:
+            res = client.session.resolve({})
+            print(res)
+        except DBusError as e:
+            sep_top = 33 * "="
+            sep_bottom = 80 * "="
+            print(f"{sep_top}> Exception <{sep_top}")
+            print(e)
+            print(sep_bottom)
+            # print(traceback.format_exc())
