@@ -1,3 +1,4 @@
+import logging
 import traceback
 from functools import partial
 from logging import getLogger
@@ -8,12 +9,23 @@ from dasbus.loop import EventLoop
 from dasbus.error import DBusError
 from gi.repository import GLib
 
+# need the python3-rich installed
+from rich.console import Console
+
+console = Console()
+
+
 # Constants
 SYSTEM_BUS = SystemMessageBus()
 DNFDBUS_NAMESPACE = ("org", "rpm", "dnf", "v0")
 DNFDBUS = DBusServiceIdentifier(namespace=DNFDBUS_NAMESPACE, message_bus=SYSTEM_BUS)
 
-log = getLogger("dnf5dbus")
+logger = getLogger("dnf5dbus")
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)-6s: (%(name)-5s) -  %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 
 def gv_list(var: list[str]) -> GLib.Variant:
@@ -54,21 +66,23 @@ class Dnf5Client:
         # setup the dnf5daemon dbus proxy
         self.proxy = DNFDBUS.get_proxy()
         self.async_dbus = AsyncDbusCaller()
+
+    def __enter__(self) -> Self:
+        """context manager enter, return current object"""
         # get a session path for the dnf5daemon
         self.session_path = self.proxy.open_session({})
         # setup a proxy for the session object path
         self.session = DNFDBUS.get_proxy(self.session_path)
-
-    def __enter__(self) -> Self:
-        """context manager enter, return current object"""
+        logger.debug(f"Open Dnf5Daemon session: {self.session_path}")
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback) -> None:
         """context manager exit"""
-        if exc_type:
-            log.critical("", exc_info=(exc_type, exc_value, exc_traceback))
-        # close dnf5 session
         self.proxy.close_session(self.session_path)
+        logger.debug(f"Close Dnf5Daemon session: {self.session_path}")
+        if exc_type:
+            logger.critical("", exc_info=(exc_type, exc_value, exc_traceback))
+        # close dnf5 session
 
     def _async_method(self, method: str) -> partial:
         """create a patial func to make an async call to a given
@@ -107,6 +121,7 @@ class Dnf5Client:
         ]
 
 
+# dnf5daemon-server is needed to work
 if __name__ == "__main__":
     with Dnf5Client() as client:
         # print(client.session.Introspect())
@@ -114,16 +129,14 @@ if __name__ == "__main__":
             "0xFFFF", package_attrs=["nevra", "repo"], repo=["fedora", "updates"]
         )
         for (nevra, repo) in pkgs:
-            print(f"{nevra:40} repo: {repo}")
+            print(f"FOUND: {nevra:40} repo: {repo}")
             res = client.session.install(gv_list([nevra]), {"strict": gv_bool(False)})
             print(res)
+
         try:
             res = client.session.resolve({})
             print(res)
         except DBusError as e:
-            sep_top = 33 * "="
-            sep_bottom = 80 * "="
-            print(f"{sep_top}> Exception <{sep_top}")
+            # console.print_exception()
+            print(10 * "=" + "> Error calling dnf5daemon :")
             print(e)
-            print(sep_bottom)
-            # print(traceback.format_exc())
