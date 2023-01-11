@@ -136,11 +136,12 @@ if __name__ == "__main__":
         print(f"Found : {len(pkgs)}")
         for (nevra, repo) in pkgs:
             print(f"FOUND: {nevra:40} repo: {repo}")
-            print("removing")
+            print("installing")
             to_inst = gv_list([nevra])
             client.session.install(to_inst, {})
         if len(pkgs) > 0:
             try:
+                print("depsolve")
                 res = client.session.resolve({})
                 print(res)
             except DBusError as e:
