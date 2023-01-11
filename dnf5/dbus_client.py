@@ -9,11 +9,6 @@ from dasbus.loop import EventLoop
 from dasbus.error import DBusError
 from gi.repository import GLib
 
-# need the python3-rich installed
-from rich.console import Console
-
-console = Console()
-
 
 # Constants
 SYSTEM_BUS = SystemMessageBus()
@@ -28,8 +23,13 @@ logging.basicConfig(
 )
 
 
+# GLib.Variant converters
 def gv_list(var: list[str]) -> GLib.Variant:
     return GLib.Variant("as", var)
+
+
+def gv_str(var: str) -> GLib.Variant:
+    return GLib.Variant("s", var)
 
 
 def gv_bool(var: bool) -> GLib.Variant:
@@ -40,6 +40,7 @@ def gv_int(var: int) -> GLib.Variant:
     return GLib.Variant("i", var)
 
 
+# async call handler class
 class AsyncDbusCaller:
     def __init__(self) -> None:
         self.res = None
@@ -105,7 +106,7 @@ class Dnf5Client:
         if "repo" in kwargs:
             options["repo"] = gv_list(kwargs.pop("repo"))
         if "scope" in kwargs:
-            options["scope"] = kwargs.pop("scope")
+            options["scope"] = gv_str(kwargs.pop("scope"))
         # get and async partial function
         get_list = self._async_method("list")
         result = get_list(options)
@@ -125,18 +126,23 @@ class Dnf5Client:
 if __name__ == "__main__":
     with Dnf5Client() as client:
         # print(client.session.Introspect())
+        key = "0xFFFF"
+        print(f"Searching for {key}")
         pkgs = client.package_list(
-            "0xFFFF", package_attrs=["nevra", "repo"], repo=["fedora", "updates"]
+            key,
+            package_attrs=["nevra", "repo"],
+            repo=["fedora", "updates"],
         )
+        print(f"Found : {len(pkgs)}")
         for (nevra, repo) in pkgs:
             print(f"FOUND: {nevra:40} repo: {repo}")
-            res = client.session.install(gv_list([nevra]), {"strict": gv_bool(False)})
-            print(res)
-
-        try:
-            res = client.session.resolve({})
-            print(res)
-        except DBusError as e:
-            # console.print_exception()
-            print(10 * "=" + "> Error calling dnf5daemon :")
-            print(e)
+            print("removing")
+            to_inst = gv_list([nevra])
+            client.session.install(to_inst, {})
+        if len(pkgs) > 0:
+            try:
+                res = client.session.resolve({})
+                print(res)
+            except DBusError as e:
+                print(10 * "=" + "> Error calling dnf5daemon :")
+                print(e)
