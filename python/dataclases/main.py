@@ -14,7 +14,9 @@ class MoreData(MyData):
 
 def main() -> None:
     data = MoreData(name="Tim", id=7, email="tla@somedomain.org")
+    data2 = MyData(name="Tom", id=5)
     print(data)
+    print(data2)
 
 
 if __name__ == "__main__":
