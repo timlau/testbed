@@ -1,3 +1,5 @@
+# Test Mermaid
+
 ```mermaid
 graph LR
 A0[Root] --- B1[Animals]
