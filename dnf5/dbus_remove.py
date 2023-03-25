@@ -130,19 +130,22 @@ if __name__ == "__main__":
         print(f"Searching for {key}")
         pkgs = client.package_list(
             key,
-            package_attrs=["nevra", "repo"],
+            package_attrs=["nevra", "repo_id"],
             repo=["fedora", "updates"],
         )
         print(f"Found : {len(pkgs)}")
         for (nevra, repo) in pkgs:
             print(f"FOUND: {nevra:40} repo: {repo}")
-            print("installing")
-            to_inst = gv_list([nevra])
-            client.session.install(to_inst, {})
+            print("removeing")
+            to_remove = gv_list([nevra])
+            client.session.remove(to_remove, {})
         if len(pkgs) > 0:
             try:
                 print("depsolve")
                 res = client.session.resolve({})
+                print(res)
+                print("do transaction")
+                res = client.session.do_transaction({})
                 print(res)
             except DBusError as e:
                 print(10 * "=" + "> Error calling dnf5daemon :")
