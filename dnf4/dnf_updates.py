@@ -1,6 +1,3 @@
-import hawkey
-import dnf.subject
-
 from base import DnfBase
 
 
