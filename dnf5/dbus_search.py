@@ -8,7 +8,6 @@ from dasbus.identifier import DBusServiceIdentifier
 from dasbus.loop import EventLoop
 from dasbus.typing import get_native, get_variant
 from gi.repository import GLib
-from requests import get
 
 # Constants
 SYSTEM_BUS = SystemMessageBus()
