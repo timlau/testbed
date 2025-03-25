@@ -1,6 +1,7 @@
 import logging
 from functools import partial
 from logging import getLogger
+from timeit import default_timer as timer
 from typing import Any, Self
 
 from dasbus.connection import SystemMessageBus
@@ -136,9 +137,11 @@ if __name__ == "__main__":
         # print(client.session.Introspect())
         key = "*"
         print(f"Searching for {key}")
+        t1 = timer()
         pkgs = client.package_list(
             key,
-            package_attrs=["nevra", "repo_id", "summary", "description"],
+            # package_attrs=["nevra", "repo_id", "summary", "description"],
+            package_attrs=["nevra", "repo_id", "summary"],
             # repo=["fedora", "updates"],
             # limit packages to one of “all”, “installed”, “available”, “upgrades”, “upgradable”
             # scope="installed",
@@ -146,6 +149,8 @@ if __name__ == "__main__":
             # scope="upgrades",
             # scope="available",
         )
+        t2 = timer()
+        print(f"execution in {(t2 - t1):.2f}s")
         print(f"Found : {len(pkgs)}")
         # for pkg in pkgs:
         #     # print(pkg)
