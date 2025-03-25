@@ -107,6 +107,9 @@ class Dnf5Client:
         options["latest-limit"] = get_variant(int, 1)
         if "repo" in kwargs:
             options["repo"] = get_variant(list[str], kwargs.pop("repo"))
+        # limit packages to one of “all”, “installed”, “available”, “upgrades”, “upgradable”
+        if "scope" in kwargs:
+            options["scope"] = get_variant(str, kwargs.pop("scope"))
         # get and async partial function
         get_list = self._async_method("list")
         result = get_list(options)
@@ -132,17 +135,22 @@ class Dnf5Client:
 if __name__ == "__main__":
     with Dnf5Client() as client:
         # print(client.session.Introspect())
-        key = "*DNF5*"
+        key = "*"
         print(f"Searching for {key}")
         pkgs = client.package_list(
             key,
             package_attrs=["nevra", "repo_id", "summary", "description"],
-            repo=["fedora", "updates"],
+            # repo=["fedora", "updates"],
+            # limit packages to one of “all”, “installed”, “available”, “upgrades”, “upgradable”
+            # scope="installed",
+            scope="all",
+            # scope="upgrades",
+            # scope="available",
         )
         print(f"Found : {len(pkgs)}")
-        for pkg in pkgs:
-            # print(pkg)
-            print(f"FOUND: {pkg['nevra']:40} repo: {pkg['repo_id']} : {pkg['summary']}")
-            print("\ndescription:")
-            print(pkg["description"])
-            print("\n")
+        # for pkg in pkgs:
+        #     # print(pkg)
+        #     print(f"FOUND: {pkg['nevra']:40} repo: {pkg['repo_id']} : {pkg['summary']}")
+        #     print("\ndescription:")
+        #     print(pkg["description"])
+        #     print("\n")
