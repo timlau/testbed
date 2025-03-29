@@ -1,4 +1,5 @@
 import logging
+import os
 from functools import partial
 from logging import getLogger
 from timeit import default_timer as timer
@@ -141,6 +142,77 @@ class Dnf5Client:
 
         return get_native(result)
 
+    def read_dbus_file(self, file_descriptor):
+        """Read data from a D-Bus file descriptor."""
+        # Wrap the file descriptor in a Python file object
+        with os.fdopen(file_descriptor, "rb") as file_obj:
+            # Read the data
+            data = file_obj.read()
+            return data
+
+    def package_list_fd(self, *args, **kwargs) -> list[list[str]]:
+        """call the org.rpm.dnf.v0.rpm.Repo list method
+
+        *args is package patterns to match
+        **kwargs can contain other options like package_attrs, repo or scope
+
+        """
+        print(args, kwargs)
+        package_attrs = kwargs.pop("package_attrs", ["nevra"])
+        options = {}
+        options["patterns"] = get_variant(list[str], args)  # gv_list(args)
+        options["package_attrs"] = get_variant(list[str], package_attrs)
+        options["with_src"] = get_variant(bool, False)
+        options["icase"] = get_variant(bool, True)
+        options["latest-limit"] = get_variant(int, 1)
+        if "repo" in kwargs:
+            options["repo"] = get_variant(list[str], kwargs.pop("repo"))
+        # limit packages to one of “all”, “installed”, “available”, “upgrades”, “upgradable”
+        if "scope" in kwargs:
+            options["scope"] = get_variant(str, kwargs.pop("scope"))
+        # get and async partial function
+        read_fd, write_fd = os.pipe()
+        rc = self.session.list_fd(options, write_fd)
+        print(rc)
+        result = self.read_dbus_file(read_fd)
+        print(result)
+        # format of result is a json like format with GLib.Variant
+        # [{
+        #   "id": GLib.Variant(),
+        #   "nevra": GLib.Variant("s", nevra),
+        #   "repo": GLib.Variant("s", repo),
+        #   },
+        #   {....},
+        # ]
+
+        # return as native types.
+        return get_native(result)
+
+    def advisory_list(self, *args, **kwargs):
+        logger.debug(f"\n --> args: {args} kwargs: {kwargs}")
+        advisory_attrs = kwargs.pop(
+            "advisor_attrs",
+            [
+                "advisoryid",
+                "name",
+                "title",
+                "type",
+                "severity",
+                "status",
+                "vendor",
+                "description",
+            ],
+        )
+        options = {}
+        options["advisory_attrs"] = get_variant(list[str], advisory_attrs)
+        # options["contains_pkgs"] = get_variant(list[str], args)
+        options["availability"] = get_variant(str, "all")
+        # options[""] = get_variant(list[str], [])
+        logger.debug(f" --> options: {options} ")
+        get_list = self._async_method("list", proxy=self.session_advisory)
+        result = get_list(options)
+        return get_native(result)
+
 
 # package_attrs: list of strings
 # list of package attributes that are returned.
@@ -161,7 +233,7 @@ if __name__ == "__main__":
             key,
             # package_attrs=["nevra", "repo_id", "summary", "description"],
             package_attrs=["nevra", "repo_id", "summary"],
-            repo=["updates-testing"],
+            # repo=["fedora", "updates"],
             # limit packages to one of “all”, “installed”, “available”, “upgrades”, “upgradable”
             # scope="installed",
             # scope="all",
@@ -172,6 +244,10 @@ if __name__ == "__main__":
         print(f"execution in {(t2 - t1):.2f}s")
         print(repos)
         print(f"Found : {len(pkgs)}")
+        for i in range(0, 50):
+            pkg = pkgs[-i]
+            print(pkg["name"], pkg["arch"], pkg["evr"])
+
         # for pkg in pkgs:
         #     # print(pkg)
         #     print(f"FOUND: {pkg['nevra']:40} repo: {pkg['repo_id']} : {pkg['summary']}")
