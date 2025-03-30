@@ -1,3 +1,5 @@
+from timeit import default_timer as timer
+
 import dbus
 
 DNFDAEMON_BUS_NAME = "org.rpm.dnf.v0"
@@ -68,5 +70,8 @@ if __name__ == "__main__":
     for repo in repos:
         if repo["enabled"]:
             id = str(repo["id"])
+            t1 = timer()
             dnf5dbus.rpm_list(id)
+            t2 = timer()
+            print(f"execution in {(t2 - t1):.2f}s")
     dnf5dbus.close_session()
