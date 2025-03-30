@@ -224,7 +224,8 @@ class Dnf5Client:
 # dnf5daemon-server is needed to work
 if __name__ == "__main__":
     with Dnf5Client() as client:
-        print(client.session.Introspect())
+        # print(client.session.Introspect())
+        package_attrs = ["nevra", "repo_id", "summary"]
         key = "*"
         print(f"Searching for {key}")
         t1 = timer()
@@ -232,8 +233,8 @@ if __name__ == "__main__":
         pkgs = client.package_list(
             key,
             # package_attrs=["nevra", "repo_id", "summary", "description"],
-            package_attrs=["nevra", "repo_id", "summary"],
-            # repo=["fedora", "updates"],
+            package_attrs=package_attrs,
+            repo=["fedora"],
             # limit packages to one of “all”, “installed”, “available”, “upgrades”, “upgradable”
             # scope="installed",
             # scope="all",
@@ -244,9 +245,14 @@ if __name__ == "__main__":
         print(f"execution in {(t2 - t1):.2f}s")
         print(repos)
         print(f"Found : {len(pkgs)}")
-        for i in range(0, 50):
+        fmt_str = ""
+        for attr in package_attrs:
+            fmt_str += f"{attr}: " + "{" + f"{attr}" + "}"
+
+        for i in range(0, 5):
             pkg = pkgs[-i]
-            print(pkg["name"], pkg["arch"], pkg["evr"])
+            pkg.pop("id")
+            print(fmt_str.format(pkg))
 
         # for pkg in pkgs:
         #     # print(pkg)
