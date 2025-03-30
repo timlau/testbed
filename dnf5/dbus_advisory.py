@@ -1,3 +1,4 @@
+import datetime
 import logging
 from functools import partial
 from logging import getLogger
@@ -121,8 +122,9 @@ class Dnf5Client:
                 "type",
                 "severity",
                 "status",
-                "vendor",
                 "description",
+                "buildtime",
+                "references",
             ],
         )
         options = {}
@@ -154,7 +156,11 @@ if __name__ == "__main__":
         t2 = timer()
         print(f"execution in {(t2 - t1):.2f}s")
         print(f"Found : {len(upd_info)}")
+        print(upd_info)
         for info in upd_info:
             print(info["name"])
             print(info["title"].split(" "))
             print(info["description"])
+
+            timestamp = datetime.datetime.fromtimestamp(info["buildtime"])
+            print(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
