@@ -1,4 +1,7 @@
+import json
 import logging
+import os
+import select
 from functools import partial
 from timeit import default_timer as timer
 from typing import Any, Self
@@ -116,13 +119,87 @@ class Dnf5DBusClient:
                 "repo": [repo],
             }
         )
+        return result
 
-        print(f"repo: {repo} packages: {len(result)}")
+    def package_list_fd(self, repo):
+        result = list(
+            self._list_fd(
+                {
+                    "package_attrs": ["nevra", "repo_id", "summary"],
+                    "repo": [repo],
+                }
+            )
+        )
+        return result
 
-        # for i, pkg in enumerate(result[0]):
-        #     print(pkg["nevra"])
-        #     if i == 10:
-        #         break
+    def _list_fd(self, options):
+        """Generator function that yields packages as they arrive from the server."""
+
+        # create a pipe and pass the write end to the server
+        pipe_r, pipe_w = os.pipe()
+        # transfer id serves as an identifier of the pipe transfer for a signal emitted
+        # after server finish. This example does not use it.
+        transfer_id = self.session_rpm.list_fd(options, pipe_w)
+        logger.debug(f"list_fd: transfer_id : {transfer_id}")
+        # close the write end - otherwise poll cannot detect the end of transmission
+        os.close(pipe_w)
+
+        # decoder that will be used to parse incomming data
+        parser = json.JSONDecoder()
+
+        # prepare for polling
+        poller = select.poll()
+        poller.register(pipe_r, select.POLLIN)
+        # wait for data 10 secs at most
+        timeout = 10000
+        # 64k is a typical size of a pipe
+        buffer_size = 65536
+
+        # remaining string to parse (can contain unfinished json from previous run)
+        to_parse = ""
+        # remaining raw data (i.e. data before UTF decoding)
+        raw_data = b""
+        while True:
+            # wait for data
+            polled_event = poller.poll(timeout)
+            if not polled_event:
+                print("Timeout reached.")
+                break
+
+            # we know there is only one fd registered in poller
+            descriptor, event = polled_event[0]
+            # read a chunk of data
+            buffer = os.read(descriptor, buffer_size)
+            if not buffer:
+                # end of file
+                break
+
+            raw_data += buffer
+            try:
+                to_parse += raw_data.decode()
+                # decode successful, clear remaining raw data
+                raw_data = b""
+            except UnicodeDecodeError:
+                # Buffer size split data in the middle of multibyte UTF character.
+                # Need to read another chunk of data.
+                continue
+
+            # parse JSON objects from the string
+            while to_parse:
+                try:
+                    # skip all chars till begin of next JSON objects (new lines mostly)
+                    json_obj_start = to_parse.find("{")
+                    if json_obj_start < 0:
+                        break
+                    obj, end = parser.raw_decode(to_parse[json_obj_start:])
+                    yield obj
+                    to_parse = to_parse[(json_obj_start + end) :]
+                except json.decoder.JSONDecodeError:
+                    # this is just example which assumes that every decode error
+                    # means the data are incomplete (buffer size split the json
+                    # object in the middle). So the handler does not do anything
+                    # just break the parsing cycle and continue polling.
+                    break
 
 
 if __name__ == "__main__":
@@ -134,6 +211,8 @@ if __name__ == "__main__":
             if repo["enabled"]:
                 id = str(repo["id"])
                 t1 = timer()
-                client.rpm_list(id)
+                # client.rpm_list(id)
+                pkgs = list(client.package_list_fd(id))
                 t2 = timer()
                 print(f"execution in {(t2 - t1):.2f}s")
+                print(f"number of pkgs: {len(pkgs)}")
