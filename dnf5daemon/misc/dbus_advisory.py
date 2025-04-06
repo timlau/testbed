@@ -76,24 +76,12 @@ class Dnf5Client:
         # setup a proxy for the session object path
         self.session = DNFDBUS.get_proxy(self.session_path)
         dnf_interface = ".".join(DNFDBUS_NAMESPACE)
-        self.session_repo = DNFDBUS.get_proxy(
-            self.session_path, interface_name=f"{dnf_interface}.rpm.Repo"
-        )
-        self.session_rpm = DNFDBUS.get_proxy(
-            self.session_path, interface_name=f"{dnf_interface}.rpm.Rpm"
-        )
-        self.session_goal = DNFDBUS.get_proxy(
-            self.session_path, interface_name=f"{dnf_interface}.Goal"
-        )
-        self.session_base = DNFDBUS.get_proxy(
-            self.session_path, interface_name=f"{dnf_interface}.Base"
-        )
-        self.session_group = DNFDBUS.get_proxy(
-            self.session_path, interface_name=f"{dnf_interface}.comps.Group"
-        )
-        self.session_advisory = DNFDBUS.get_proxy(
-            self.session_path, interface_name=f"{dnf_interface}.Advisory"
-        )
+        self.session_repo = DNFDBUS.get_proxy(self.session_path, interface_name=f"{dnf_interface}.rpm.Repo")
+        self.session_rpm = DNFDBUS.get_proxy(self.session_path, interface_name=f"{dnf_interface}.rpm.Rpm")
+        self.session_goal = DNFDBUS.get_proxy(self.session_path, interface_name=f"{dnf_interface}.Goal")
+        self.session_base = DNFDBUS.get_proxy(self.session_path, interface_name=f"{dnf_interface}.Base")
+        self.session_group = DNFDBUS.get_proxy(self.session_path, interface_name=f"{dnf_interface}.comps.Group")
+        self.session_advisory = DNFDBUS.get_proxy(self.session_path, interface_name=f"{dnf_interface}.Advisory")
         logger.debug(f"Open Dnf5Daemon session: {self.session_path}")
         return self
 
