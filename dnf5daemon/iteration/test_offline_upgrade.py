@@ -30,6 +30,12 @@ def main():
     print("tranaction complete")
     for problem in problems:
         print(" --> ", problem)
+    success, err = client.offline_reboot()
+    if success:
+        print("Reboot successful")
+    else:
+        print("Reboot failed")
+        print(err)
     client.session_base.reset()
     client.close_session()
 
