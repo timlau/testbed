@@ -24,14 +24,9 @@ IFACE_GOAL = "{}.Goal".format(DNFDAEMON_BUS_NAME)
 IFACE_BASE = "{}.Base".format(DNFDAEMON_BUS_NAME)
 IFACE_GROUP = "{}.comps.Group".format(DNFDAEMON_BUS_NAME)
 IFACE_ADVISORY = "{}.Advisory".format(DNFDAEMON_BUS_NAME)
+IFACE_OFFLINE = "{}.Offline".format(DNFDAEMON_BUS_NAME)
 
 logger = logging.getLogger(__name__)
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s %(levelname)-6s: (%(name)-5s) -  %(message)s",
-    datefmt="%H:%M:%S",
-)
 
 
 # async call handler class
@@ -48,7 +43,7 @@ class AsyncCaller:
 
     def reply_handler(self, *args) -> None:
         if len(args) > 1:
-            self.res = (value for value in args)
+            self.res = args
         else:
             if args:
                 self.res = args[0]
@@ -79,10 +74,10 @@ class Dnf5DbusClient:
         self._connected = False
 
     @dbus_exception
-    def open_session(self):
+    def open_session(self, options={}):
         if not self._connected:
-            logger.debug(f"DBUS: {self.iface_session.object_path}.open_session()")
-            self.session = self.iface_session.open_session({})
+            logger.debug(f"DBUS: {self.iface_session.object_path}.open_session({options})")
+            self.session = self.iface_session.open_session(options)
             if self.session:
                 logger.debug(f"open session: {self.session}")
                 self._connected = True
@@ -110,6 +105,10 @@ class Dnf5DbusClient:
                     self.bus.get_object(DNFDAEMON_BUS_NAME, self.session),
                     dbus_interface=IFACE_GROUP,
                 )
+                self.session_offline = dbus.Interface(
+                    self.bus.get_object(DNFDAEMON_BUS_NAME, self.session),
+                    dbus_interface=IFACE_OFFLINE,
+                )
             else:
                 raise YumexException("Couldn't open session to Dnf5Dbus")
 
@@ -121,13 +120,19 @@ class Dnf5DbusClient:
             logger.debug(f"close session: {self.session} ({rc})")
             self._connected = False
 
+    def reopen_session(self, options=None):
+        """Close and reopen the session"""
+        self.close_session()
+        if options:
+            self.open_session(options)
+        else:
+            self.open_session()
+
     def _async_method(self, method: str, proxy=None) -> partial:
         """create a patial func to make an async call to a given
         dbus method name
         """
-        return partial(
-            self.async_dbus.call, getattr(proxy, method), timeout=1000 * 60 * 20
-        )
+        return partial(self.async_dbus.call, getattr(proxy, method), timeout=1000 * 60 * 20)
 
     def resolve(self, *args):
         logger.debug(f"DBUS: {self.session_goal.object_path}.resolve()")
@@ -135,21 +140,21 @@ class Dnf5DbusClient:
         res, err = resolve(dbus.Array())
         return res, err
 
-    def do_transaction(self):
+    def do_transaction(self, options={}):
         logger.debug(f"DBUS: {self.session_goal.object_path}.do_transaction()")
         do_transaction = self._async_method("do_transaction", proxy=self.session_goal)
-        options = {"comment": "Yum Extender Transaction"}
+        options["comment"] = "Yum Extender Transaction"
         res, err = do_transaction(options)
         return res, err
 
     @dbus_exception
-    def confirm_key(self, *args):
-        return self.session_repo.confirm_key(args)
+    def confirm_key(self, key_id: str, confirmed: bool):
+        return self.session_repo.confirm_key(key_id, confirmed)
 
     def repo_list(self):
         logger.debug(f"DBUS: {self.session_repo.object_path}.list()")
         get_list = self._async_method("list", proxy=self.session_repo)
-        res, err = get_list({"repo_attrs": dbus.Array(["name", "enabled", "priority"])})
+        res, err = get_list({"repo_attrs": dbus.Array(["name", "enabled", "priority"]), "enable_disable": "all"})
         return res, err
 
     def _list_fd(self, options):
@@ -235,11 +240,11 @@ class Dnf5DbusClient:
         options["package_attrs"] = dbus.Array(kwargs.pop("package_attrs", ["nevra"]))
         options["with_src"] = False
         # options["with_nevra"] = kwargs.pop("with_nevra", True)
-        # options["with_provides"] = kwargs.pop("with_provides", False)
-        # options["with_filenames"] = kwargs.pop("with_filenames", False)
-        # options["with_binaries"] = kwargs.pop("with_binaries", False)
+        options["with_provides"] = kwargs.pop("with_provides", False)
+        options["with_filenames"] = kwargs.pop("with_filenames", False)
+        options["with_binaries"] = kwargs.pop("with_binaries", False)
         options["icase"] = True
-        options["latest-limit"] = 1
+        options["latest-limit"] = kwargs.pop("latest_limit", 1)
         # limit packages to one of “all”, “installed”, “available”, “upgrades”, “upgradable”
         options["scope"] = kwargs.pop("scope", "all")
         if "repo" in kwargs:
@@ -249,17 +254,15 @@ class Dnf5DbusClient:
         # get and async partial function
         # logger.debug(f" --> options: {options} ")
 
-        logger.debug(f"DBUS: {self.session_rpm.object_path}.list_fd()")
+        # logger.debug(f"DBUS: {self.session_rpm.object_path}.list_fd()")
         result = list(self._list_fd(options))
-        logger.debug(f"list_fd() returned : {len(result)} elements")
+        logger.debug(f"list_fd({args}) returned : {len(result)} elements")
         return result
 
     @dbus_exception
     def _test_exception(self):
         """Just for testing purpose"""
-        raise dbus.exceptions.DBusException(
-            "DBUSError : Something strange in the neighborhood"
-        )
+        raise dbus.exceptions.DBusException("DBUSError : Something strange in the neighborhood")
 
     def package_list(self, *args, **kwargs) -> list[list[str]]:
         """call the org.rpm.dnf.v0.rpm.Repo list method
@@ -278,7 +281,7 @@ class Dnf5DbusClient:
         # options["with_filenames"] = kwargs.pop("with_filenames", False)
         # options["with_binaries"] = kwargs.pop("with_binaries", False)
         options["icase"] = True
-        options["latest-limit"] = 1
+        options["latest-limit"] = kwargs.pop("latest_limit", 1)
         # limit packages to one of “all”, “installed”, “available”, “upgrades”, “upgradable”
         options["scope"] = kwargs.pop("scope", "all")
         if "repo" in kwargs:
@@ -315,3 +318,37 @@ class Dnf5DbusClient:
         result = self.session_base.clean(metadata_type)
         logger.debug(f"clean : {result}")
         return result
+
+    @dbus_exception
+    def system_upgrade(self, options):
+        logger.debug(f"DBUS: system-upgrade({options})")
+        system_upgrade = self._async_method("system_upgrade", proxy=self.session_rpm)
+        res, err = system_upgrade(options)
+        logger.debug(f"system-upgrade returned : {res, err}")
+        return res, err
+
+    @dbus_exception
+    def offline_get_status(self):
+        """Get the status of the offline update"""
+        logger.debug(f"DBUS: {self.session_offline.object_path}.get_status()")
+        pending, status = self.session_offline.get_status()
+        logger.debug(f"offline_get_status() returned : pending : {pending} stautus :{status}")
+        return bool(pending), dict(status)
+
+    @dbus_exception
+    def offline_clean(self):
+        """Cancel the offline update"""
+        logger.debug(f"DBUS: {self.session_offline.object_path}.cancel()")
+        clean = self._async_method("clean", proxy=self.session_offline)
+        success, err_msg = clean()
+        logger.debug(f"clean() returned : success : {success} err_msg : {err_msg}")
+        return bool(success), str(err_msg)
+
+    @dbus_exception
+    def offline_reboot(self):
+        """Reboot the system and install the offline update"""
+        logger.debug(f"DBUS: {self.session_offline.object_path}.set_finish_action()")
+        reboot = self._async_method("set_finish_action", proxy=self.session_offline)
+        success, err_msg = reboot("reboot")
+        logger.debug(f"offline_reboot() returned : success : {success} err_msg : {err_msg}")
+        return bool(success), str(err_msg)
