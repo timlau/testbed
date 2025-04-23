@@ -1,7 +1,7 @@
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gio, GObject, Gtk  # noqa: E402
+from gi.repository import Gdk, Gio, GObject, Gtk  # noqa: E402
 
 
 class DataObject(GObject.GObject):
@@ -16,6 +16,7 @@ class ExampleWindow(Gtk.ApplicationWindow):
         self.set_title("ListView with Right-Click Menu")
         self.set_default_size(400, 300)
         gesture = Gtk.GestureClick.new()
+        gesture.set_button(3)
         gesture.connect("pressed", self.press)
         gesture.connect("released", self.release)
 
@@ -55,8 +56,8 @@ class ExampleWindow(Gtk.ApplicationWindow):
         if event.button == 3:  # Right-click
             # Create a PopoverMenu
             menu = Gtk.PopoverMenu()
-            menu.set_pointing_to(event)
-            menu.set_parent(widget)
+            # menu.set_pointing_to(event)
+            # menu.set_parent(widget)
 
             # Create actions for the menu
             action_group = Gio.SimpleActionGroup()
@@ -77,14 +78,40 @@ class ExampleWindow(Gtk.ApplicationWindow):
     def press(self, *args):
         print(f"Pressed : {args}")
 
-    def release(self, *args):
-        print(f"Released : {args}")
+    def release(self, _controller, _click_count, x, y):
+        print(f"Released : {_click_count} {x} {y}")
         # if n_press == 1:
         #     # Handle single click
         #     print("Single click detected")
         # elif n_press == 2:
         #     # Handle double click
         #     print("Double click detected")
+        # Create a PopoverMenu
+        menu = Gtk.PopoverMenu()
+        rect = Gdk.Rectangle()
+        rect.x = x
+        rect.y = y
+        rect.width = 0
+        rect.height = 0
+        menu.set_pointing_to(rect)
+        menu.set_has_arrow(False)
+        menu.set_parent(self.listview)
+
+        # Create actions for the menu
+        action_group = Gio.SimpleActionGroup()
+        self.insert_action_group("context", action_group)
+
+        action = Gio.SimpleAction.new("delete", None)
+        action.connect("activate", self.on_delete_item)
+        action_group.add_action(action)
+
+        # Add menu items
+        menu_model = Gio.Menu()
+        menu_model.append("Delete", "context.delete")
+        menu.set_menu_model(menu_model)
+
+        # Show the menu
+        menu.popup()
 
     def on_delete_item(self, action, param):
         print("Delete action triggered")
